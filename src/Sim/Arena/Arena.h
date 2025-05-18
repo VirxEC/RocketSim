@@ -7,9 +7,9 @@
 
 #include "../../CollisionMeshFile/CollisionMeshFile.h"
 #include "../BoostPad/BoostPadGrid/BoostPadGrid.h"
-#include "../SuspensionCollisionGrid/SuspensionCollisionGrid.h"
 #include "../MutatorConfig/MutatorConfig.h"
 #include "ArenaConfig/ArenaConfig.h"
+#include "DropshotTiles/DropshotTiles.h"
 
 #include "../../../libsrc/bullet3-3.24/BulletCollision/BroadphaseCollision/btDbvtBroadphase.h"
 #include "../../../libsrc/bullet3-3.24/BulletCollision/CollisionShapes/btStaticPlaneShape.h"
@@ -45,12 +45,12 @@ public:
 	
 	BoostPadGrid _boostPadGrid;
 
-	SuspensionCollisionGrid _suspColGrid;
-
 	MutatorConfig _mutatorConfig;
 
+	DropshotTilesState _dropshotTilesState;
+
 	const MutatorConfig& GetMutatorConfig() { return _mutatorConfig; }
-	RSAPI void SetMutatorConfig(const MutatorConfig& mutatorConfig);
+	void SetMutatorConfig(const MutatorConfig& mutatorConfig);
 
 	// Time in seconds each tick (1/tickrate)
 	float tickTime; 
@@ -68,10 +68,10 @@ public:
 
 	// Returns true if added, false if car was already added
 	bool _AddCarFromPtr(Car* car);
-	RSAPI Car* AddCar(Team team, const CarConfig& config = CAR_CONFIG_OCTANE);
+	Car* AddCar(Team team, const CarConfig& config = CAR_CONFIG_OCTANE);
 
 	// Returns false if the car ID was not found in the cars list
-	RSAPI bool RemoveCar(uint32_t id);
+	bool RemoveCar(uint32_t id);
 
 	// Returns false if the car was not found in the cars list
 	// NOTE: If the car was removed, the car will be freed and the pointer will be made invalid
@@ -79,7 +79,7 @@ public:
 		return RemoveCar(car->id);
 	}
 
-	RSAPI Car* GetCar(uint32_t id);
+	Car* GetCar(uint32_t id);
 
 	btDiscreteDynamicsWorld _bulletWorld;
 	struct {
@@ -90,31 +90,31 @@ public:
 		btSequentialImpulseConstraintSolver constraintSolver;
 	} _bulletWorldParams;
 
-	btRigidBody* _worldCollisionRBs;
-	size_t _worldCollisionRBAmount;
-	btBvhTriangleMeshShape* _worldCollisionBvhShapes;
-	btStaticPlaneShape* _worldCollisionPlaneShapes;
+	std::vector<btRigidBody*> _worldCollisionRBs = {};
+	std::vector<btBvhTriangleMeshShape*> _worldCollisionBvhShapes = {};
+	std::vector<btStaticPlaneShape*> _worldCollisionPlaneShapes = {};
+	std::vector<btRigidBody*> _worldDropshotTileRBs = {};
 
 	struct {
 		GoalScoreEventFn func = NULL;
 		void* userInfo = NULL;
 	} _goalScoreCallback;
-	RSAPI void SetGoalScoreCallback(GoalScoreEventFn callbackFn, void* userInfo = NULL);
+	void SetGoalScoreCallback(GoalScoreEventFn callbackFn, void* userInfo = NULL);
 
 	struct {
 		CarBumpEventFn func = NULL;
 		void* userInfo = NULL;
 	} _carBumpCallback;
-	RSAPI void SetCarBumpCallback(CarBumpEventFn callbackFn, void* userInfo = NULL);
+	void SetCarBumpCallback(CarBumpEventFn callbackFn, void* userInfo = NULL);
 
 	// NOTE: Arena should be destroyed after use
-	RSAPI static Arena* Create(GameMode gameMode, const ArenaConfig& arenaConfig = {}, float tickRate = 120);
+	static Arena* Create(GameMode gameMode, const ArenaConfig& arenaConfig = {}, float tickRate = 120);
 	
 	// Serialize entire arena state including cars, ball, and boostpads
-	RSAPI void Serialize(DataStreamOut& out) const;
+	void Serialize(DataStreamOut& out) const;
 
 	// Load new arena from serialized data
-	RSAPI static Arena* DeserializeNew(DataStreamIn& in);
+	static Arena* DeserializeNew(DataStreamIn& in);
 
 	Arena(const Arena& other) = delete; // No copy constructor, use Arena::Clone() instead
 	Arena& operator =(const Arena& other) = delete; // No copy operator, use Arena::Clone() instead
@@ -123,50 +123,35 @@ public:
 	Arena& operator =(Arena&& other) = delete; // No move operator
 
 	// Get a deep copy of the arena
-	RSAPI Arena* Clone(bool copyCallbacks);
+	Arena* Clone(bool copyCallbacks);
 
 	// NOTE: Car ID will not be restored
-	RSAPI Car* DeserializeNewCar(DataStreamIn& in, Team team);
+	Car* DeserializeNewCar(DataStreamIn& in, Team team);
 
 	// Simulate everything in the arena for a given number of ticks
-	RSAPI void Step(int ticksToSimulate = 1);
+	void Step(int ticksToSimulate = 1);
 
-	RSAPI void ResetToRandomKickoff(int seed = -1);
+	void ResetToRandomKickoff(int seed = -1);
 
 	// Returns true if the ball is probably going in, does not account for wall or ceiling bounces
 	// NOTE: Purposefully overestimates, just like the real RL's shot prediction
 	// To check which goal it will score in, use the ball's velocity
 	// Margin can be manually adjusted with extraMargin (negative to prevent overestimating)
-	RSAPI bool IsBallProbablyGoingIn(float maxTime = 2.f, float extraMargin = 0, Team* goalTeamOut = NULL) const;
+	bool IsBallProbablyGoingIn(float maxTime = 2.f, float extraMargin = 0, Team* goalTeamOut = NULL) const;
 
 	// Returns true if the ball is in the net
 	// Works for all gamemodes (and does nothing in THE_VOID)
-	RSAPI bool IsBallScored() const;
+	bool IsBallScored() const;
 
 	// Free all associated memory
-	RSAPI ~Arena();
+	~Arena();
 
 	// NOTE: Passed shape pointer will be freed when arena is deconstructed
-	template <class T>
+	// NOTE: Shape will be automatically added to _worldCollisionRBs but no other list 
 	btRigidBody* _AddStaticCollisionShape(
-		size_t rbIndex, size_t meshListIndex, T* shape, T* meshList, btVector3 posBT = btVector3(0, 0, 0), 
-		bool isHoopsNet = false) {
-
-		static_assert(std::is_base_of<btCollisionShape, T>::value);
-		meshList[meshListIndex] = *shape;
-
-		assert(rbIndex < _worldCollisionRBAmount);
-		btRigidBody& shapeRB = _worldCollisionRBs[rbIndex];
-		shapeRB = btRigidBody(0, NULL, &meshList[meshListIndex]);
-		shapeRB.setWorldTransform(btTransform(btMatrix3x3::getIdentity(), posBT));
-		shapeRB.setUserPointer(this);
-		if (isHoopsNet) {
-			_bulletWorld.addRigidBody(&shapeRB, CollisionMasks::HOOPS_NET, CollisionMasks::HOOPS_NET);
-		} else {
-			_bulletWorld.addRigidBody(&shapeRB);
-		}
-		return &shapeRB;
-	}
+		btCollisionShape* shape,
+		btVector3 posBT = btVector3(0, 0, 0),
+		int group = 0, int mask = 0);
 
 	void _SetupArenaCollisionShapes();
 
@@ -189,6 +174,9 @@ public:
 	ArenaMemWeightMode GetMemWeightMode() {
 		return _config.memWeightMode;
 	}
+
+	DropshotTilesState GetDropshotTilesState() const { return _dropshotTilesState; };
+	void SetDropshotTilesState(const DropshotTilesState& tilesState);
 
 private:
 	

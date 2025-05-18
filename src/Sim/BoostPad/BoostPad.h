@@ -10,6 +10,16 @@
 
 RS_NS_START
 
+struct BoostPadConfig {
+	Vec pos;
+	bool isBig = false;
+
+	void Serialize(DataStreamOut& out) const;
+	void Deserialize(DataStreamIn& in);
+};
+#define BOOSTPADCONFIG_SERIALIZATION_FIELDS \
+pos, isBig
+
 struct BoostPadState {
 	bool isActive = true;
 	float cooldown = 0;
@@ -25,20 +35,19 @@ isActive, cooldown, prevLockedCarID
 
 class BoostPad {
 public:
-	bool isBig;
-	Vec pos;
+	BoostPadConfig config;
 
 	Vec _posBT;
 	Vec _boxMinBT, _boxMaxBT;
 
 	BoostPadState _internalState;
 
-	RSAPI BoostPadState GetState() const { return _internalState; }
-	RSAPI void SetState(const BoostPadState& state) { _internalState = state; }
+	BoostPadState GetState() const { return _internalState; }
+	void SetState(const BoostPadState& state) { _internalState = state; }
 
 	// For construction by Arena
 	static BoostPad* _AllocBoostPad();
-	void _Setup(bool isBig, Vec pos);
+	void _Setup(const BoostPadConfig& config);
 
 	void _CheckCollide(Car* car);
 

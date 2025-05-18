@@ -3,6 +3,8 @@
 #include "../../../DataStream/DataStreamOut.h"
 #include "../../../DataStream/DataStreamIn.h"
 
+#include "../../BoostPad/BoostPad.h"
+
 RS_NS_START
 
 // Mode of speed/memory optimization for the arena
@@ -18,8 +20,8 @@ struct ArenaConfig {
 	ArenaMemWeightMode memWeightMode = ArenaMemWeightMode::HEAVY;
 
 	// Mininimum and maximum positions all physics objects
-	Vec minPos = Vec(-4500, -6000, 0),
-		maxPos = Vec( 4500,  6000, 2500);
+	Vec minPos = Vec(-5600, -6000, 0),
+		maxPos = Vec( 5600,  6000, 2200);
 	
 	// Maximum length of any object
 	// Calculated as the distance from AABB min to AABB max
@@ -37,6 +39,11 @@ struct ArenaConfig {
 
 	// Maximum number of objects
 	int maxObjects = 512;
+
+	// Use a custom list of boost pads (customBoostPads) instead of the normal one
+	// NOTE: This will disable the boost pad grid and will thus worsen performance
+	bool useCustomBoostPads = false;
+	std::vector<BoostPadConfig> customBoostPads = {}; // Custom boost pads to use, if useCustomBoostPads
 
 	void Serialize(DataStreamOut& out) const;
 	void Deserialize(DataStreamIn& in);

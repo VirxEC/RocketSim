@@ -13,7 +13,7 @@ enum class DemoMode : byte {
 	DISABLED
 };
 
-RSAPI struct MutatorConfig {
+struct MutatorConfig {
 
 	Vec gravity = Vec(0, 0, RLConst::GRAVITY_Z);
 
@@ -39,7 +39,8 @@ RSAPI struct MutatorConfig {
 		jumpAccel = RLConst::JUMP_ACCEL,
 		jumpImmediateForce = RLConst::JUMP_IMMEDIATE_FORCE,
 
-		boostAccel = RLConst::BOOST_ACCEL,
+		boostAccelGround = RLConst::BOOST_ACCEL_GROUND,
+		boostAccelAir = RLConst::BOOST_ACCEL_AIR,
 		boostUsedPerSecond = RLConst::BOOST_USED_PER_SECOND,
 
 		respawnDelay = RLConst::DEMO_RESPAWN_TIME,
@@ -61,8 +62,15 @@ RSAPI struct MutatorConfig {
 		unlimitedFlips = false,
 		unlimitedDoubleJumps = false;
 
+	bool rechargeBoostEnabled = false;
+	float rechargeBoostPerSecond = RLConst::RECHARGE_BOOST_PER_SECOND;
+	float rechargeBoostDelay = RLConst::RECHARGE_BOOST_DELAY;
+
 	DemoMode demoMode = DemoMode::NORMAL;
 	bool enableTeamDemos = false;
+
+	// Only used if the game mode has soccar goals (i.e. soccar, heatseeker, snowday)
+	float goalBaseThresholdY = RLConst::SOCCAR_GOAL_SCORE_BASE_THRESHOLD_Y;
 
 	MutatorConfig(GameMode gameMode);
 
@@ -73,9 +81,10 @@ RSAPI struct MutatorConfig {
 #define MUTATOR_CONFIG_SERIALIZATION_FIELDS \
 gravity, carMass, carWorldFriction, carWorldRestitution, ballMass, \
 ballMaxSpeed, ballDrag, ballWorldFriction, ballWorldRestitution, jumpAccel, \
-jumpImmediateForce, boostAccel, boostUsedPerSecond, respawnDelay, \
+jumpImmediateForce, boostAccelGround, boostAccelAir, boostUsedPerSecond, respawnDelay, \
 carSpawnBoostAmount, bumpCooldownTime, boostPadCooldown_Big, boostPadCooldown_Small, \
 ballHitExtraForceScale, bumpForceScale, ballRadius, unlimitedFlips, unlimitedDoubleJumps, \
-demoMode, enableTeamDemos
+rechargeBoostEnabled, rechargeBoostPerSecond, rechargeBoostDelay, \
+demoMode, enableTeamDemos, goalBaseThresholdY
 
 RS_NS_END
