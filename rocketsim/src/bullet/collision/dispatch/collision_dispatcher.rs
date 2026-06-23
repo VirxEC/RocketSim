@@ -154,7 +154,7 @@ impl CollisionDispatcher {
     }
 
     // Miss leaves None; hit writes Some.
-    fn process_collision<'a, T: ContactAddedCallback>(
+    pub fn process_collision<'a, T: ContactAddedCallback>(
         col_obj_a: &'a RigidBody,
         col_obj_b: &'a RigidBody,
         contact_added_callback: &'a mut T,
