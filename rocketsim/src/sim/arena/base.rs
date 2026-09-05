@@ -7,7 +7,6 @@ use glam::{Affine3A, EulerRot, Mat3A, Vec3A};
 use indexmap::IndexMap;
 
 use super::ArenaContactTracker;
-use crate::shared::Aabb;
 use crate::{
     ARENA_COLLISION_SHAPES, ArenaConfig,
     ArenaEvent::{BallHitWorld, CarPickupBoost},
@@ -41,7 +40,7 @@ use crate::{
     },
     consts::{self, BT_TO_UU, TICK_RATE, TICK_TIME, UU_TO_BT},
     make_tile_shapes,
-    shared::quantize,
+    shared::{Aabb, quantize},
     sim::{
         ArenaEvent, Ball, BallState, BoostPad, CarHitBallEvent, CarHitCarEvent, CarHitWorldEvent,
         DemoMode, UserInfoTypes, arena::ArenaEventList,
