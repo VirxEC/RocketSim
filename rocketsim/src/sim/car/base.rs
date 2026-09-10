@@ -386,18 +386,12 @@ impl Car {
         }
 
         if self.state.is_flipping && self.state.flip_rel_torque != Vec3A::ZERO {
-            let proj_x = rb.ang_vel.x + rb.accum_ang_vel.x;
-            if proj_x > flip::SPIN_CAP_X {
-                rb.accum_ang_vel.x -= proj_x - flip::SPIN_CAP_X;
-            } else if proj_x < -flip::SPIN_CAP_X {
-                rb.accum_ang_vel.x -= proj_x + flip::SPIN_CAP_X;
-            }
-            let proj_y = rb.ang_vel.y + rb.accum_ang_vel.y;
-            if proj_y > flip::SPIN_CAP_Y {
-                rb.accum_ang_vel.y -= proj_y - flip::SPIN_CAP_Y;
-            } else if proj_y < -flip::SPIN_CAP_Y {
-                rb.accum_ang_vel.y -= proj_y + flip::SPIN_CAP_Y;
-            }
+            rb.accum_ang_vel.x = (rb.ang_vel.x + rb.accum_ang_vel.x)
+                .clamp(-flip::SPIN_CAP_X, flip::SPIN_CAP_X)
+                - rb.ang_vel.x;
+            rb.accum_ang_vel.y = (rb.ang_vel.y + rb.accum_ang_vel.y)
+                .clamp(-flip::SPIN_CAP_Y, flip::SPIN_CAP_Y)
+                - rb.ang_vel.y;
         }
 
         let throttle_scale = if self.state.controls.boost {
