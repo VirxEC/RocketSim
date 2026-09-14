@@ -1,0 +1,143 @@
+{
+ "0x30303030_emit_sat": "none - zero matches for 0x30303030/NaN/invalid in bakkesmod.log; no rlpr_log/emit/SAT files emitted by this build; none added per instructions",
+ "boost_direct_fields": {
+  "armed_clock_exact_120ths": true,
+  "car0_active": 6779,
+  "car0_armed_range": [
+   0.0083,
+   1.3667
+  ],
+  "car0_inactive": 26956,
+  "car0_inactive_range": [
+   0.0083,
+   23.6664
+  ],
+  "car1_active": 8441,
+  "car1_armed_range": [
+   0.0083,
+   1.4
+  ],
+  "car1_inactive": 25294,
+  "car1_inactive_range": [
+   0.0083,
+   7.6916
+  ],
+  "finite_times": "33735/33735 both cars",
+  "inactive_semantics": "free-running time-since-last-bActive-toggle (prior controlled v7 validation); bool bytes all 0/1, zero non-finite times across 67470 records"
+ },
+ "bot_toml": "/home/virx/Documents/python-interface/tests/wisp/wisp.bot.toml",
+ "bot_toml_sha256": "e0a2a34c7346e652b0747b9e8552b95161f75ea7954ca530f48a3f8b6bd38c15",
+ "capture_procedure": "bash tests/agent/spawn_rl.sh (RLBot-only, -rlbot confirmed, one-car live) -> boost smoke (separate artifact) -> python3 -u capture_necto_1v1.py 5 wisp_1v1_300s_v7_NEW.rlpr match_wisp_1v1_exhibition.toml (MatchManager.start_match, 2-car wait, clear_inputs + record_start, 60x run_ticks n=600, record_stop + record_dump) -> full gate validation -> mv -f over official name only after PASS",
+ "capture_script": "tests/agent/capture_necto_1v1.py",
+ "capture_script_sha256": "1cfaab0342460ec148e94fae7d894733e53f13f497069778af4046c7be525f2f",
+ "capture_time_utc": "2026-09-14T17:12-17:17Z (spawn boot 13:12Z)",
+ "car_car": {
+  "asymmetric_rows": 0,
+  "contiguous_symmetric_spans": 104,
+  "longest_spans": [
+   33,
+   17,
+   11,
+   10,
+   9,
+   9,
+   9,
+   7
+  ],
+  "min_center_dist": "see validation log",
+  "ticks_car0": 390,
+  "ticks_car1": 390
+ },
+ "car_record_h": "src/core/car_record.h",
+ "car_record_h_sha256": "4a0a09bdfdadbe63475ced4977e3bcd81f37e7c98a96eb7358f0b750729c1a50",
+ "car_record_cpp": "src/core/car_record.cpp",
+ "car_record_cpp_sha256": "e67a8d9e419ab75de302607c9056db5233f328e94ca32b37559bc13917e6fd1e",
+ "command": "python3 -u capture_necto_1v1.py 5 wisp_1v1_300s_v7_NEW.rlpr match_wisp_1v1_exhibition.toml (staged, then promoted after gates passed)",
+ "command_cwd": "/home/virx/Documents/rl_phys_record/tests/agent",
+ "commanded_ticks": 36000,
+ "control_plausibility": "both cars full throttle range, boost_cmd total 20106, full-arena ranges (car0 y -5106..5206, car1 y -5287..5104), jumps 2224 / flips 12133 car-ticks; RLBot-driven, no bridge inputs during match",
+ "emit_source": "fixed - hooks.cpp unchanged from prior v7 benchmark (89957b19), deployed DLL 6507dca5 is the padding-fix build; startup log shows rl_phys_record loaded successfully with pattern-scan offsets resolving",
+ "exhibition_evidence": "TOML freeplay=false, Soccar, Stadium_P, FiveMinutes/Unlimited/Unlimited, start_without_countdown=false, Restart, skip_replays=true; -rlbot confirmed by spawn_rl.sh",
+ "frame_delta_histogram": {
+  "car0": {
+   "1": 33729,
+   "388": 1,
+   "389": 1,
+   "391": 3
+  },
+  "car1": {
+   "1": 33729,
+   "388": 1,
+   "389": 1,
+   "391": 3
+  },
+  "ordinary_2_3_gaps": 0
+ },
+ "frame_span": "phys.frame 590 -> 36269 (35679 frames over 36000 commanded; 2265 lost to 5 replay skips, remainder kickoff-countdown overlap as in prior benchmarks)",
+ "framing": "magic RLPR, endian 0, version u32=7, info prefix 28, num_ticks u32; every car prefix asserted 596 and every ball prefix 332 in raw walk; rlpr.parse OK, exact end-of-buffer (no trailing bytes)",
+ "frozen_tail": {
+  "disposition": "no trim - ends live mid-play",
+  "status": "ABSENT (trailing identical-pos run = 0)",
+  "tail10_ball_move": 120.7
+ },
+ "game_sha256": "b737d4888ba89527bd278db9e82d63af54f3385bb1e4b9088c55053df7aee01c",
+ "hooks_cpp": "src/core/hooks.cpp",
+ "hooks_cpp_sha256": "89957b19ec08b830d68b998c3170287c337bcab7c80b0a87296fa7bf10dab04a",
+ "label_checks": {
+  "ball": "x -4010..4009, y -5211..5215, speed max 3306.0",
+  "ball_world_ticks": 2942,
+  "car0": "x -4084..4081, y -5106..5206, speed max 3261.0 mean 1451.2",
+  "car1": "x -4084..4084, y -5287..5104, speed max 3593.0 mean 1465.0",
+  "car_ball_ticks_any_car": 258,
+  "chassis_world_car_ticks": 583,
+  "num_cars": 2,
+  "wheel_world_car_ticks": 36401
+ },
+ "large_gap_disposition": "all 5 gaps land ball exactly at [0,0,92.7] kickoff center with ~5200 ball and multi-thousand car teleports: goal-replay/kickoff resets. Identical tick indices on both cars (shared timeline). Safe for metric segmentation: split at gaps, no continuity implied (same signature as v6/v7 priors)",
+ "large_gaps_tickidx": [
+  5591,
+  8058,
+  9818,
+  16584,
+  24881
+ ],
+ "log_evidence": {
+  "hook_errors": "none for rl_phys_record (loaded successfully 12:48:32; only benign pre-existing 'Failed loading bridge.dll as a Common plugin' for BakkesMod's own Bridge plugin)",
+  "nan_invalid": "no NaN/invalid lines in bakkesmod.log",
+  "pattern_scan": "[class PluginInst] Found offset of 1920 (12:48:33) and 320 (12:48:34) - core startup resolution OK"
+ },
+ "match_toml": "tests/agent/match_wisp_1v1_exhibition.toml",
+ "match_toml_sha256": "896a96d1e78592fb764c6acfaaf5ab8a87f2def5def59a5b1099bdd330cca73d",
+ "no_pause": "steady 1 chunk/s real-time capture (301 s wall for 300 s); no paused game",
+ "num_cars": 2,
+ "num_ticks": 33735,
+ "old_files_preserved": "prior out/*.rlpr untouched except the named promotion target (overwritten only after gates passed); smoke artifact retained",
+ "output": "tests/agent/out/wisp_1v1_300s_v7.rlpr",
+ "output_sha256": "4dd4b33e6e27b42055f667416c076a04479e3b821f8339369f59b640661a75c9",
+ "output_size_bytes": 51817005,
+ "padding_scan": {
+  "bad_bool_bytes": 0,
+  "method": "raw byte walk of all framed car bodies (596 prefix asserted per record)",
+  "nonfinite_boosting_time": 0,
+  "nonzero_585_587": 0,
+  "nonzero_589_591": 0,
+  "records_scanned": 67470
+ },
+ "parser": "tests/agent/rlpr.py",
+ "parser_sha256": "f1532288423367584c3833aae9b09db21c58b6594838ce36fe861ae8d0199ecf",
+ "plugin_deployed": "/home/virx/.steam/steam/steamapps/compatdata/252950/pfx/drive_c/users/steamuser/AppData/Roaming/bakkesmod/bakkesmod/plugins/rl_phys_record.dll",
+ "plugin_deployed_sha256": "6507dca5b196114c17ff5bbb825861a37ae6918a07dcac86059129c4af9d2f3a",
+ "plugin_source": "build-plugin/rl_phys_record.dll (identical hash, padding-fixed build, no rebuild)",
+ "promotion": "staged as wisp_1v1_300s_v7_NEW.rlpr, promoted via mv -f only after all hard gates passed on the staged bytes (hash recomputed post-move)",
+ "retry": "not needed - smoke PASS and benchmark first run passed all hard gates",
+ "smoke_artifact": "tests/agent/out/boostv7_padfix_smoke.rlpr (+ sidecar): 61 one-car records, padding zeros 61/61 both ranges, boost arm@6/disarm@21 live",
+ "source_edits": "none; no instrumentation added, production source untouched",
+ "substep_evidence": "bakkesmod.log 13:12:00-02: 'Plugin substepplugin loaded successfully' + '[class SubStepPlugin] Disabled substepping'; zero ordinary delta-2/3 gaps confirms effect",
+ "substep_plugin": "~/.steam/.../bakkesmod/plugins/SubstepPlugin.dll",
+ "substep_plugin_sha256": "7a0bcb3532620d69c4693c3ac5c4410fe431a52db5fe89e1d85ac323dad94f7a",
+ "topology_grace": "normal 30-tick spawn/destroy grace retained (hooks.cpp s_grace=30)",
+ "untouched_projects": "RocketSim not copied to; no source edits in rl_phys_record",
+ "version": 7,
+ "wall_game_ratio": "Capture wall 301 s for 36000 commanded run_ticks (real-time). Game span frames 590 to 36269 is 35679 frames (297.3 s). Useful recorded ticks 33735 (281.1 s) plus 2265 replay-skip frames (18.9 s).",
+ "teardown": "2026-09-14T17:19Z: pkill RocketLeague.exe + BakkesMod.exe + RLBotServer; pgrep only self-match (zero survivors), ss no listeners on 51337/23234"
+}
