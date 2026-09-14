@@ -288,136 +288,6 @@ pub fn run_start(ticks: &[TickRecord], segment_start: usize) -> usize {
     start
 }
 
-/// Maximum integrator steps in one handbrake seed.
-///
-/// A fall from 1.0 to 0.0 needs 60 steps: 60 * (2.0 / 120) = 1.0. A rise
-/// from 0.0 saturates in 24 steps: 24 * (5.0 / 120) = 1.0. Sixty frame
-/// steps therefore bound the seed and match the legacy 60-tick window on
-/// contiguous runs.
-const MAX_SEED_STEPS: u32 = 60;
-
-/// Maximum missing physics frames bridged at one gap.
-///
-/// C1 misses one frame and C2a misses two frames, both with held input.
-/// Larger gaps reseed so the harness never invents controls across long
-/// outages.
-const MAX_MISSING_FRAMES: u32 = 2;
-
-/// One handbrake integrator step for a recorded bool.
-fn handbrake_step(value: f32, handbrake: bool) -> f32 {
-    let delta = if handbrake {
-        rocketsim::consts::car::drive::POWERSLIDE_RISE_RATE
-    } else {
-        -rocketsim::consts::car::drive::POWERSLIDE_FALL_RATE
-    } * rocketsim::consts::TICK_TIME;
-    (value + delta).clamp(0.0, 1.0)
-}
-
-/// Verified reset boundary for handbrake history.
-///
-/// Mirrors [`split_segments`] except frame gaps. Frame gaps alone can
-/// bridge with held input. Car-count changes, empty or oversize ticks,
-/// frozen transitions, and teleports stop history and reseed to zero.
-/// A teleport or kickoff reset zeroes the target integrator, so zero is
-/// the correct reseed there.
-fn is_seed_reset_boundary(from: &TickRecord, to: &TickRecord) -> bool {
-    let prev_count = tick_car_count(from);
-    let curr_count = tick_car_count(to);
-    if prev_count != curr_count
-        || prev_count == 0
-        || prev_count > MAX_SCORED_CARS
-        || curr_count == 0
-        || curr_count > MAX_SCORED_CARS
-    {
-        return true;
-    }
-    if tick_is_frozen(from, to) || any_teleport(from, to) {
-        return true;
-    }
-    false
-}
-
-/// Frame steps for one backward edge, or `None` when history stops.
-///
-/// Returns the integrator steps the `from -> to` transition contributes:
-/// 1 for contiguous frames, `delta` for a short held gap. Returns `None`
-/// on reset boundaries, large or non-monotonic gaps, changed input across
-/// unobserved frames, or a missing car. The run edge additionally
-/// requires a gap: a contiguous caller boundary is authoritative and
-/// reseeds.
-fn back_edge_steps(
-    from: &TickRecord,
-    to: &TickRecord,
-    car_idx: usize,
-    is_run_edge: bool,
-) -> Option<u32> {
-    if is_seed_reset_boundary(from, to) {
-        return None;
-    }
-    let prev = from.car_records.get(car_idx)?;
-    let curr = to.car_records.get(car_idx)?;
-    match curr.phys.physics_frame.checked_sub(prev.phys.physics_frame) {
-        Some(1) if !is_run_edge => Some(1),
-        Some(delta)
-            if (2..=1 + MAX_MISSING_FRAMES).contains(&delta)
-                && prev.prev_controls.handbrake == curr.prev_controls.handbrake =>
-        {
-            Some(delta)
-        }
-        _ => None,
-    }
-}
-
-/// Seed start for a bridged run edge, or `None` for the legacy window.
-///
-/// Precondition: `run_start` is the clean-run start containing
-/// `state_index` (see [`run_start`]). Only the run edge itself may gap;
-/// edges strictly inside the run are contiguous. Returns the first tick
-/// to integrate from when the edge shows a short held gap, walking back
-/// at most `MAX_SEED_STEPS` frame steps. Returns `None` when history is
-/// unavailable or blocked, in which case the caller keeps the legacy
-/// 60-tick window.
-fn seed_start(
-    ticks: &[TickRecord],
-    run_start: usize,
-    state_index: usize,
-    car_idx: usize,
-) -> Option<usize> {
-    if run_start == 0 || run_start > state_index || state_index >= ticks.len() {
-        return None;
-    }
-    back_edge_steps(&ticks[run_start - 1], &ticks[run_start], car_idx, true)?;
-    let mut first = state_index;
-    let mut steps: u32 = 1;
-    while first > 0 && steps < MAX_SEED_STEPS {
-        match back_edge_steps(
-            &ticks[first - 1],
-            &ticks[first],
-            car_idx,
-            first == run_start,
-        ) {
-            Some(delta) if steps + delta <= MAX_SEED_STEPS => {
-                first -= 1;
-                steps += delta;
-            }
-            _ => break,
-        }
-    }
-    (first < run_start).then_some(first)
-}
-
-/// One recorded tick plus its preceding gap fills.
-///
-/// Callers pass a nonzero `missing` only for short held gaps, so gap
-/// fills repeat an input equal to the recorded one here.
-fn step_tick(value: f32, prev_hb: bool, curr_hb: bool, missing: u32) -> f32 {
-    let mut value = value;
-    for _ in 0..missing {
-        value = handbrake_step(value, prev_hb);
-    }
-    handbrake_step(value, curr_hb)
-}
-
 /// Reconstruct the handbrake integrator at one recorded state.
 ///
 /// RLPR does not store `handbrake_val`. `prev_controls` at tick `i` is the
@@ -425,11 +295,6 @@ fn step_tick(value: f32, prev_hb: bool, curr_hb: bool, missing: u32) -> f32 {
 /// from 1.0 takes 60 ticks at 120 Hz. A 60-tick window is therefore enough
 /// to remove all state from before the window for the fall-only case. At a
 /// run boundary, assume the value before the run was zero.
-///
-/// A short held frame gap at the run edge bridges recorded history from
-/// before the run. Missing frames count as game ticks holding the last
-/// recorded bool. Resets, teleports, frozen ticks, count changes, large
-/// gaps, and changed inputs across unobserved frames all reseed to zero.
 pub fn reconstruct_handbrake(
     ticks: &[TickRecord],
     run_start: usize,
@@ -439,42 +304,17 @@ pub fn reconstruct_handbrake(
     if state_index >= ticks.len() || run_start > state_index {
         return None;
     }
-    // Bridged seeds integrate pre-run history; anything else keeps the
-    // legacy 60-tick window. Both paths share one forward loop below.
-    let first = match seed_start(ticks, run_start, state_index, car_idx) {
-        Some(first) => first,
-        None => state_index.saturating_sub(59).max(run_start),
-    };
+
+    let first = state_index.saturating_sub(59).max(run_start);
     let mut value = 0.0;
-    value = handbrake_step(
-        value,
-        ticks[first]
-            .car_records
-            .get(car_idx)?
-            .prev_controls
-            .handbrake,
-    );
-    for j in (first + 1)..=state_index {
-        let prev = ticks[j - 1].car_records.get(car_idx)?;
-        let curr = ticks[j].car_records.get(car_idx)?;
-        // Gap fills repeat only short held inputs. Anything else scores
-        // the recorded tick without inventing controls, so no sample is
-        // ever skipped.
-        let missing = match curr.phys.physics_frame.checked_sub(prev.phys.physics_frame) {
-            Some(delta)
-                if (2..=1 + MAX_MISSING_FRAMES).contains(&delta)
-                    && prev.prev_controls.handbrake == curr.prev_controls.handbrake =>
-            {
-                delta - 1
-            }
-            _ => 0,
-        };
-        value = step_tick(
-            value,
-            prev.prev_controls.handbrake,
-            curr.prev_controls.handbrake,
-            missing,
-        );
+    for tick in &ticks[first..=state_index] {
+        let car = tick.car_records.get(car_idx)?;
+        let delta = if car.prev_controls.handbrake {
+            rocketsim::consts::car::drive::POWERSLIDE_RISE_RATE
+        } else {
+            -rocketsim::consts::car::drive::POWERSLIDE_FALL_RATE
+        } * rocketsim::consts::TICK_TIME;
+        value = (value + delta).clamp(0.0, 1.0);
     }
     Some(value)
 }
@@ -1223,113 +1063,6 @@ mod tests {
         ticks[1].car_records[0].prev_controls.handbrake = false;
         let bounded = reconstruct_handbrake(&ticks, 1, 1, 0).unwrap();
         assert_eq!(bounded, 0.0);
-    }
-
-    fn set_frame(tick: &mut TickRecord, frame: u32) {
-        tick.car_records[0].phys.physics_frame = frame;
-        tick.ball_record.physics_frame = frame;
-    }
-
-    fn expected_rises(n: usize) -> f32 {
-        let mut value = 0.0;
-        for _ in 0..n {
-            value = handbrake_step(value, true);
-        }
-        value
-    }
-
-    #[test]
-    fn handbrake_rise_advances_single_step() {
-        let mut ticks: Vec<_> = (0..2).map(|i| quiet_tick(i, i as f32)).collect();
-        for tick in &mut ticks {
-            tick.car_records[0].prev_controls.handbrake = false;
-        }
-        ticks[1].car_records[0].prev_controls.handbrake = true;
-        let rise = reconstruct_handbrake(&ticks, 0, 1, 0).unwrap();
-        assert!((rise - 5.0 / 120.0).abs() < 1e-6);
-        assert_eq!(expected_rises(24), 1.0);
-    }
-
-    #[test]
-    fn handbrake_fall_decays_single_step() {
-        let mut ticks: Vec<_> = (0..3).map(|i| quiet_tick(i, i as f32)).collect();
-        for tick in &mut ticks {
-            tick.car_records[0].prev_controls.handbrake = false;
-        }
-        ticks[1].car_records[0].prev_controls.handbrake = true;
-        let fall = reconstruct_handbrake(&ticks, 0, 2, 0).unwrap();
-        assert!((fall - (5.0 / 120.0 - 2.0 / 120.0)).abs() < 1e-6);
-        let mut saturated = 1.0;
-        for _ in 0..60 {
-            saturated = handbrake_step(saturated, false);
-        }
-        assert!(saturated.abs() < 1e-6);
-    }
-
-    // Gap cases: (missing frames, pre-run hb, gap-arrival hb, expected).
-    // Held short gaps bridge to 4 + missing + 1 rises. Anything else
-    // reseeds to one arrival step: a held press gives 5.0/120, a release
-    // from zero clamps to 0.0.
-    #[test]
-    fn handbrake_gap_cases() {
-        for (missing, pre_hb, post_hb, expected) in [
-            (1u32, true, true, expected_rises(6)),
-            (2, true, true, expected_rises(7)),
-            (2, true, false, 0.0),
-            (1, false, true, 5.0 / 120.0),
-            (10, true, true, 5.0 / 120.0),
-        ] {
-            let mut ticks: Vec<_> = (0..6).map(|i| quiet_tick(i, i as f32)).collect();
-            set_frame(&mut ticks[4], 3 + 1 + missing);
-            set_frame(&mut ticks[5], 4 + 1 + missing);
-            for tick in ticks.iter_mut().take(4) {
-                tick.car_records[0].prev_controls.handbrake = pre_hb;
-            }
-            ticks[4].car_records[0].prev_controls.handbrake = post_hb;
-            ticks[5].car_records[0].prev_controls.handbrake = false;
-            let seed = reconstruct_handbrake(&ticks, 4, 4, 0).unwrap();
-            assert!(
-                (seed - expected).abs() < 1e-6,
-                "missing={missing} pre={pre_hb} post={post_hb}: {seed} != {expected}"
-            );
-        }
-    }
-
-    #[test]
-    fn handbrake_teleport_boundary_reseeds() {
-        let mut ticks: Vec<_> = (0..6).map(|i| quiet_tick(i, i as f32)).collect();
-        for tick in ticks.iter_mut().take(5) {
-            tick.car_records[0].prev_controls.handbrake = true;
-        }
-        ticks[4].car_records[0].phys.pos = vec(5000.0, 0.0, 100.0);
-        ticks[5].car_records[0].phys.pos = vec(5010.0, 0.0, 100.0);
-        let stopped = reconstruct_handbrake(&ticks, 4, 4, 0).unwrap();
-        assert!((stopped - 5.0 / 120.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn handbrake_frozen_boundary_reseeds() {
-        let mut ticks: Vec<_> = (0..6).map(|i| quiet_tick(i, i as f32)).collect();
-        for tick in ticks.iter_mut().take(5) {
-            tick.car_records[0].prev_controls.handbrake = true;
-        }
-        ticks[4].car_records[0].phys.pos = ticks[3].car_records[0].phys.pos;
-        ticks[4].car_records[0].phys.lin_vel = ticks[3].car_records[0].phys.lin_vel;
-        ticks[4].car_records[0].phys.ang_vel = ticks[3].car_records[0].phys.ang_vel;
-        assert!(tick_is_frozen(&ticks[3], &ticks[4]));
-        let stopped = reconstruct_handbrake(&ticks, 4, 4, 0).unwrap();
-        assert!((stopped - 5.0 / 120.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn handbrake_no_history_falls_back_to_single_step() {
-        let mut single = vec![quiet_tick(0, 0.0)];
-        single[0].car_records[0].prev_controls.handbrake = true;
-        let seed = reconstruct_handbrake(&single, 0, 0, 0).unwrap();
-        assert!((seed - 5.0 / 120.0).abs() < 1e-6);
-        assert_eq!(reconstruct_handbrake(&single, 1, 0, 0), None);
-        assert_eq!(reconstruct_handbrake(&single, 0, 1, 0), None);
-        assert_eq!(reconstruct_handbrake(&single, 0, 0, 1), None);
     }
 
     #[test]
