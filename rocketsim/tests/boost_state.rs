@@ -6,7 +6,10 @@
 //! RocketSim `0`-`100` scale.
 
 use glam::Vec3A;
-use rocketsim::{Arena, CarBodyConfig, GameMode, Team, consts::TICK_TIME};
+use rocketsim::{
+    Arena, CarBodyConfig, GameMode, Team,
+    consts::{TICK_TIME, car::boost::USED_PER_SECOND},
+};
 
 fn init_once() {
     static INIT: std::sync::Once = std::sync::Once::new();
@@ -20,7 +23,8 @@ fn init_once() {
 }
 
 fn cost_per_tick() -> f32 {
-    (100.0 / 3.0) * TICK_TIME
+    // True-cost frame: tracks the default consume rate (33.3/s).
+    USED_PER_SECOND * TICK_TIME
 }
 
 fn fresh_airborne(boost: f32, armed: bool, time: f32) -> (Arena, usize) {

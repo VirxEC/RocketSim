@@ -101,7 +101,10 @@ pub mod car {
 
     pub mod boost {
         pub const MAX: f32 = 100.0;
-        pub const USED_PER_SECOND: f32 = MAX / 3.0;
+        // Default consume rate is decimal 0.333 x 100, not 1/3.
+        // f32(33.3) is 33.29999924 (bits 0x42053333), bit-exact for
+        // live rate x 100. Per-tick cost is 0.2775 (bits 0x3E8E147B).
+        pub const USED_PER_SECOND: f32 = 33.3;
         /// Minimum time we can be boosting for
         pub const MIN_TIME: f32 = 0.1;
         /// uu/s for vel (on the ground)
