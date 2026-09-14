@@ -118,21 +118,12 @@ impl ReplayBackend for V3Backend {
         V3Backend::refresh_sticky_gates(self);
     }
 
-    fn seed_boost_state(&mut self, ticks: &[TickRecord], run_start: usize, state_index: usize) {
-        use rocketsim_test::rlpr::boost_seed::reconstruct_boost_state;
-        for slot in 0..self.car_ids.len() {
-            let Some(&car_id) = self.car_ids.get(slot) else {
-                continue;
-            };
-            let Some((armed, time)) = reconstruct_boost_state(ticks, run_start, state_index, slot)
-            else {
-                continue;
-            };
-            let mut state = *self.arena.get_car_state(car_id);
-            state.is_boosting = armed;
-            state.boosting_time = time;
-            self.arena.set_car_state(car_id, state);
-        }
+    fn set_boost_state(&mut self, car_idx: usize, armed: bool, time: f32) {
+        let car_id = self.car_id(car_idx, "set_boost_state");
+        let mut state = *self.arena.get_car_state(car_id);
+        state.is_boosting = armed;
+        state.boosting_time = time;
+        self.arena.set_car_state(car_id, state);
     }
 
     fn reset(&mut self, start: &TickRecord) {
