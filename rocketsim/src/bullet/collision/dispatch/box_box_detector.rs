@@ -611,10 +611,23 @@ fn box_box_sat(obb1: &Obb, r1t: &Mat3A, obb2: &Obb) -> Option<Hit> {
 
 #[cfg(test)]
 mod tests {
-    use glam::{Mat3A, Vec3A};
+    use glam::{Affine3A, Mat3A, Vec3A};
 
-    use super::{Obb, box_box_sat};
-    use crate::{CarBodyConfig, consts::UU_TO_BT};
+    use super::{BoxBoxDetector, Obb, box_box_sat};
+    use crate::{
+        CarBodyConfig,
+        bullet::{
+            collision::{
+                narrowphase::persistent_manifold::{ContactAddedCallback, PersistentManifold},
+                shapes::{
+                    box_shape::BoxShape, collision_shape::CollisionShapes,
+                    sphere_shape::SphereShape,
+                },
+            },
+            dynamics::rigid_body::{RigidBody, RigidBodyConstructionInfo},
+        },
+        consts::UU_TO_BT,
+    };
 
     fn octane_obb(pos_uu: Vec3A, rot_mat: Mat3A) -> Obb {
         let config = CarBodyConfig::OCTANE;
@@ -643,5 +656,76 @@ mod tests {
 
         let hit = box_box_sat(&car_a, &car_a.axis.transpose(), &car_b);
         assert!(hit.is_some());
+    }
+
+    struct NoopCallback;
+    impl ContactAddedCallback for NoopCallback {
+        fn callback(
+            &mut self,
+            _contact_point: &mut crate::bullet::collision::narrowphase::manifold_point::ManifoldPoint,
+            _body_a: &RigidBody,
+            _body_b: &RigidBody,
+            _idx: Option<usize>,
+        ) {
+        }
+    }
+
+    /// Two-car regression from `wisp_1v1_300s.rlpr` tick 13092 (N-1 for 13093).
+    /// SAT reports ~5 UU overlap on a face axis, but the buggy incident-quad
+    /// extents (`[Ea1, Ea1, Ea2, Ea2]`) shift the clip so all depths go negative
+    /// and `cnum` stays 0. Bullet `dBoxBox2` uses `[Ea1, Ea2, Ea1, Ea2]`
+    /// (`k1=m11*Sb[a1], k3=m12*Sb[a2], k2=m21*Sb[a1], k4=m22*Sb[a2]`).
+    /// The quad x row pairs `k.x, k.y` (=k1, k3).
+    /// The quad y row pairs `k.z, k.w` (=k2, k4).
+    #[test]
+    fn wisp13092_two_car_face_clip_emits_contact() {
+        let car0_rot = Mat3A::from_cols(
+            Vec3A::new(-0.883963, 0.455769, -0.10432),
+            Vec3A::new(-0.467468, -0.857182, 0.216134),
+            Vec3A::new(0.009086, 0.239821, 0.970775),
+        );
+        let car1_rot = Mat3A::from_cols(
+            Vec3A::new(-0.369822, -0.928835, -0.022322),
+            Vec3A::new(0.251146, -0.123069, 0.960094),
+            Vec3A::new(-0.894515, 0.349457, 0.278786),
+        );
+        let car0_pos = Vec3A::new(3724.8127, 2630.4973, 40.7628);
+        let car1_pos = Vec3A::new(3649.4556, 2673.9414, 43.7866);
+
+        let config = CarBodyConfig::OCTANE;
+        let half = config.hitbox_size * UU_TO_BT * 0.5;
+        let box_a = BoxShape::new(half);
+        let box_b = BoxShape::new(half);
+        let trans_a = Affine3A {
+            matrix3: car0_rot,
+            translation: (car0_pos + car0_rot * config.hitbox_pos_offset) * UU_TO_BT,
+        };
+        let trans_b = Affine3A {
+            matrix3: car1_rot,
+            translation: (car1_pos + car1_rot * config.hitbox_pos_offset) * UU_TO_BT,
+        };
+
+        let make_body = |idx: usize| {
+            let mut body = RigidBody::new(RigidBodyConstructionInfo::new(
+                1.0,
+                CollisionShapes::Sphere(SphereShape::new(0.5)),
+            ));
+            body.world_array_idx = idx;
+            body
+        };
+        let col_a = make_body(0);
+        let col_b = make_body(1);
+        let mut cb = NoopCallback;
+        let mut detector = BoxBoxDetector {
+            box1: &box_a,
+            col1: &col_a,
+            box2: &box_b,
+            col2: &col_b,
+            contact_added_callback: &mut cb,
+        };
+        let mut out: Option<PersistentManifold> = None;
+        detector.get_closest_points(trans_a, trans_b, &mut out);
+        let manifold = out.expect("13092 two-car overlap must emit a manifold");
+        assert!(!manifold.point_cache.is_empty());
     }
 }
