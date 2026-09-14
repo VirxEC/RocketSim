@@ -1,3 +1,4 @@
+pub mod boost_seed;
 pub mod cpp_records;
 mod data_reader;
 pub mod tick_record;

@@ -56,6 +56,11 @@ pub trait ReplayBackend {
     /// their default when they do not expose this state.
     fn set_handbrake_value(&mut self, _car_idx: usize, _value: f32) {}
 
+    /// Restore the boost armed bit plus time-since-arm from Boost impulse
+    /// history. Only the v3 backend implements this; others keep live-bit
+    /// evolution.
+    fn seed_boost_state(&mut self, _ticks: &[TickRecord], _run_start: usize, _state_index: usize) {}
+
     /// Refresh hidden prior-tick wheel state without advancing dynamics.
     fn refresh_sticky_gates(&mut self) {}
 
@@ -618,6 +623,22 @@ pub fn restore_handbrake_seed<B: ReplayBackend>(
     }
 }
 
+/// Restore the boost armed bit plus time-since-arm after a v3 reset.
+///
+/// Skips recordings without impulse data so impulse-less legacy captures
+/// keep live-bit evolution. Harness only, not physics.
+pub fn restore_boost_seed<B: ReplayBackend>(
+    backend: &mut B,
+    ticks: &[TickRecord],
+    run_start: usize,
+    state_index: usize,
+) {
+    if !rocketsim_test::rlpr::boost_seed::recording_has_impulse_data(ticks) {
+        return;
+    }
+    backend.seed_boost_state(ticks, run_start, state_index);
+}
+
 /// Run each segment open-loop and aggregate every car-tick into one report.
 /// Every arena car steps with its own recorded controls, so car-car
 /// contacts are real sim observations. Resets at each segment start,
@@ -643,6 +664,7 @@ pub fn evaluate<B: ReplayBackend>(
         if !reset_each_tick {
             backend.reset(&ticks[segment.start]);
             restore_handbrake_seed(backend, ticks, segment_run_start, segment.start);
+            restore_boost_seed(backend, ticks, segment_run_start, segment.start);
         }
         for offset in 1..segment.len {
             let target_index = segment.start + offset;
@@ -654,6 +676,7 @@ pub fn evaluate<B: ReplayBackend>(
                 } else {
                     backend.set_state(&ticks[state_index]);
                 }
+                restore_boost_seed(backend, ticks, segment_run_start, state_index);
                 if offset == 1 {
                     restore_handbrake_seed(backend, ticks, segment_run_start, state_index);
                 }
@@ -949,6 +972,55 @@ mod tests {
     struct MirrorBackend {
         snaps: Vec<Vec<Snapshot>>,
         cursor: usize,
+    }
+
+    struct SeedProbe {
+        seed_calls: usize,
+    }
+
+    impl ReplayBackend for SeedProbe {
+        fn reset(&mut self, _start: &TickRecord) {}
+        fn set_state(&mut self, _state: &TickRecord) {}
+        fn seed_boost_state(
+            &mut self,
+            _ticks: &[TickRecord],
+            _run_start: usize,
+            _state_index: usize,
+        ) {
+            self.seed_calls += 1;
+        }
+        fn step(&mut self, _controls: &[ControlsRecord]) -> Vec<SimContactEvents> {
+            vec![]
+        }
+        fn snapshot(&mut self, _car_idx: usize) -> Snapshot {
+            let body = BodySnapshot {
+                pos: Vec3A::ZERO,
+                vel: Vec3A::ZERO,
+                ang_vel: Vec3A::ZERO,
+                forward: Vec3A::X,
+                up: Vec3A::Z,
+            };
+            Snapshot {
+                car: body,
+                ball: body,
+            }
+        }
+    }
+
+    #[test]
+    fn boost_seed_skips_recordings_without_impulse_data() {
+        use rocketsim_test::rlpr::boost_seed::{
+            reconstruct_boost_state, recording_has_impulse_data,
+        };
+        let ticks: Vec<_> = (0..4).map(|i| quiet_tick(i, i as f32)).collect();
+        assert!(!recording_has_impulse_data(&ticks));
+        assert_eq!(reconstruct_boost_state(&ticks, 0, 2, 0), Some((false, 0.0)));
+        let mut probe = SeedProbe { seed_calls: 0 };
+        restore_boost_seed(&mut probe, &ticks, 0, 2);
+        assert_eq!(
+            probe.seed_calls, 0,
+            "impulse-less recordings keep live-bit evolution"
+        );
     }
 
     impl MirrorBackend {
