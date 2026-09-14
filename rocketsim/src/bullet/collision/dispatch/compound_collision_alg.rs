@@ -22,6 +22,20 @@ use crate::{
     shared::Aabb,
 };
 
+/// Chassis box-triangle emit normal. Returns the analytic triangle face
+/// normal transformed by the mesh rotation unchanged, even when the SAT
+/// axis falls in the opposite hemisphere. Falls back to the SAT normal
+/// only for a degenerate (near-zero-length) face normal.
+#[inline]
+fn chassis_box_leaf_emit_normal(tri_matrix: Mat3A, face_normal: Vec3A, sat_normal: Vec3A) -> Vec3A {
+    let emit_normal: Vec3A = tri_matrix * face_normal;
+    if emit_normal.length_squared() <= f32::EPSILON * f32::EPSILON {
+        sat_normal
+    } else {
+        emit_normal
+    }
+}
+
 struct ConvexTriangleCallback<'a, T: ContactAddedCallback> {
     manifold: Option<PersistentManifold>,
     convex_obj: &'a RigidBody,
@@ -76,18 +90,17 @@ impl<T: ContactAddedCallback> ProcessTriangle for ConvexTriangleCallback<'_, T> 
 
         // Face-normal terminal (the adapter convention preserved from the
         // reference detector): the emitted normal is always the analytic
-        // triangle face normal, aligned to the SAT normal hemisphere. Depth
-        // and witness come from the SAT kernel unchanged. The mesh body is
-        // static for the whole BVH walk, so its rotation is cached per
-        // compound/mesh collision (`transform_vector3a` is exactly this
-        // matrix-vector product).
-        let mut emit_normal: Vec3A = self.tri_matrix * triangle.normal;
-        if emit_normal.dot(contact.normal_on_b_world) < 0.0 {
-            emit_normal = -emit_normal;
-        }
-        if emit_normal.length_squared() <= f32::EPSILON * f32::EPSILON {
-            emit_normal = contact.normal_on_b_world;
-        }
+        // triangle face normal transformed by the mesh rotation. It is
+        // passed through unchanged even when the SAT axis falls in the
+        // opposite hemisphere. Depth and witness come from the SAT kernel
+        // unchanged. The mesh body is static for the whole BVH walk, so its
+        // rotation is cached per compound/mesh collision
+        // (`transform_vector3a` is exactly this matrix-vector product).
+        let emit_normal: Vec3A = chassis_box_leaf_emit_normal(
+            self.tri_matrix,
+            triangle.normal,
+            contact.normal_on_b_world,
+        );
 
         let (convex_obj, tri_obj) = (self.convex_obj, self.tri_obj);
         let manifold = self
@@ -202,5 +215,41 @@ pub fn process_collision<T: ContactAddedCallback>(
             )
         }
         _ => unimplemented!(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::chassis_box_leaf_emit_normal;
+    use glam::{Mat3A, Vec3A};
+
+    fn tri595_face_normal() -> Vec3A {
+        Vec3A::new(0.62136, 0.62136, 0.47731).normalize()
+    }
+
+    #[test]
+    fn opposite_hemisphere_sat_keeps_analytic_face_normal() {
+        let face = tri595_face_normal();
+        let sat = Vec3A::new(-0.71790, -0.55830, 0.41584).normalize();
+        assert!(face.dot(sat) < 0.0);
+        let emit = chassis_box_leaf_emit_normal(Mat3A::IDENTITY, face, sat);
+        assert_eq!(emit, face);
+        assert!(emit.dot(sat) < 0.0);
+    }
+
+    #[test]
+    fn positive_alignment_keeps_analytic_face_normal() {
+        let face = tri595_face_normal();
+        let sat = face;
+        assert!(face.dot(sat) > 0.0);
+        let emit = chassis_box_leaf_emit_normal(Mat3A::IDENTITY, face, sat);
+        assert_eq!(emit, face);
+    }
+
+    #[test]
+    fn degenerate_face_falls_back_to_sat_normal() {
+        let sat = Vec3A::X;
+        let emit = chassis_box_leaf_emit_normal(Mat3A::IDENTITY, Vec3A::ZERO, sat);
+        assert_eq!(emit, sat);
     }
 }
