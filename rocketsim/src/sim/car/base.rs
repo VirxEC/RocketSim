@@ -395,15 +395,6 @@ impl Car {
             rb.add_impulse(None, Impulse::Angular(rb_torque), false, true);
         }
 
-        if self.state.is_flipping && self.state.flip_rel_torque != Vec3A::ZERO {
-            rb.accum_ang_vel.x = (rb.ang_vel.x + rb.accum_ang_vel.x)
-                .clamp(-flip::SPIN_CAP_X, flip::SPIN_CAP_X)
-                - rb.ang_vel.x;
-            rb.accum_ang_vel.y = (rb.ang_vel.y + rb.accum_ang_vel.y)
-                .clamp(-flip::SPIN_CAP_Y, flip::SPIN_CAP_Y)
-                - rb.ang_vel.y;
-        }
-
         let throttle_scale = if self.state.controls.boost || self.state.is_boosting {
             1.0
         } else {
